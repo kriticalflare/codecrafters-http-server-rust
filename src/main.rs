@@ -88,11 +88,9 @@ fn main() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let handle = thread::spawn(|| {
+                let _handle = thread::spawn(move || {
                     handle_client(stream);
                 });
-
-                handle.join().unwrap();
             }
             Err(e) => {
                 println!("error: {}", e);
