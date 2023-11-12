@@ -17,7 +17,9 @@ fn main() {
                 let _ = stream
                     .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
                     .map_err(|err| eprintln!("failed to write to stream {err}"));
-                stream.shutdown(std::net::Shutdown::Both).unwrap();
+                let _ = stream
+                    .shutdown(std::net::Shutdown::Both)
+                    .map_err(|err| eprintln!("failed to shutdown connection {err}"));
             }
             Err(e) => {
                 println!("error: {}", e);
