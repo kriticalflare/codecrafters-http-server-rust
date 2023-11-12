@@ -1,9 +1,12 @@
 // Uncomment this block to pass the first stage
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::thread;
+use std::path::Path;
+use std::{fs, thread};
 
-fn handle_client(mut stream: TcpStream) {
+use nom::AsBytes;
+
+fn handle_client(mut stream: TcpStream, file_directory_path: Option<String>) {
     println!("accepted new connection");
 
     let mut request_data = String::new();
@@ -69,6 +72,40 @@ fn handle_client(mut stream: TcpStream) {
                 let _ = stream
                     .write(response.as_bytes())
                     .map_err(|err| eprintln!("failed to write to stream {err}"));
+            } else if path.starts_with("/files/") {
+                let file_name = path
+                    .strip_prefix("/files/")
+                    .expect("failed to strip /files/");
+
+                match file_directory_path {
+                    Some(dir_path) => {
+                        let file_path = Path::new(&dir_path).join(file_name);
+                        match fs::read(file_path) {
+                            Ok(file) => {
+                                let content_length = file.len();
+                                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {content_length}\r\n\r\n");
+
+                                let _ = stream
+                                    .write(response.as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+
+                                let _ = stream.write_all(&file).map_err(|err| {
+                                    eprintln!("failed to write file to stream {err}")
+                                });
+                            }
+                            Err(_) => {
+                                let _ = stream
+                                    .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+                            }
+                        }
+                    }
+                    None => {
+                        let _ = stream
+                            .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                            .map_err(|err| eprintln!("failed to write to stream {err}"));
+                    }
+                }
             } else {
                 let _ = stream
                     .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
@@ -85,11 +122,25 @@ fn handle_client(mut stream: TcpStream) {
 fn main() {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
+    let mut file_directory: Option<String> = None;
+    let args: Vec<String> = std::env::args().collect();
+
+    match args.len() {
+        3 => {
+            let command = &args[1];
+            if command == "--directory" {
+                file_directory = Some(args[2].clone());
+            }
+        }
+        _ => {}
+    }
+
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                let file_directory = file_directory.clone();
                 let _handle = thread::spawn(move || {
-                    handle_client(stream);
+                    handle_client(stream, file_directory);
                 });
             }
             Err(e) => {
