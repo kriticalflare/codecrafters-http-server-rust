@@ -3,11 +3,6 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 
 fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    // println!("Logs from your program will appear here!");
-
-    // Uncomment this block to pass the first stage
-
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
@@ -33,14 +28,32 @@ fn main() {
 
                     println!("path -> {path}");
 
-                    if path == "/" {
-                        let _ = stream
-                            .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
-                            .map_err(|err| eprintln!("failed to write to stream {err}"));
-                    } else {
-                        let _ = stream
-                            .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
-                            .map_err(|err| eprintln!("failed to write to stream {err}"));
+                    match path {
+                        "/" => {
+                            let _ = stream
+                                .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
+                                .map_err(|err| eprintln!("failed to write to stream {err}"));
+                        }
+                        _ => {
+                            if !path.starts_with("/echo/") {
+                                let _ = stream
+                                    .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+                            } else {
+                                let random_string =
+                                    path.strip_prefix("/echo/").expect("failed to strip /echo/");
+
+                                println!("random-string {random_string}");
+
+                                let content_length = random_string.len();
+
+                                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: {content_length}\r\n\r\n{random_string}\r\n");
+
+                                let _ = stream
+                                    .write(response.as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+                            }
+                        }
                     }
                 }
                 let _ = stream
