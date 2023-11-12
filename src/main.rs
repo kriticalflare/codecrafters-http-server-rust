@@ -4,8 +4,6 @@ use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::{fs, thread};
 
-use nom::AsBytes;
-
 fn handle_client(mut stream: TcpStream, file_directory_path: Option<String>) {
     println!("accepted new connection");
 
@@ -25,14 +23,13 @@ fn handle_client(mut stream: TcpStream, file_directory_path: Option<String>) {
 
     println!("request-data {request_data}");
 
-    let mut lines = request_data.lines();
-
+    let mut lines = request_data.split("\r\n").into_iter();
     let startline = lines.next().expect("Missing start line");
 
     println!("startline -->|{startline}");
 
     let mut segments = startline.split_whitespace();
-    let _ = segments.next().unwrap();
+    let method = segments.next().unwrap();
     let path = segments.next().unwrap();
 
     println!("path -> {path}");
@@ -77,8 +74,8 @@ fn handle_client(mut stream: TcpStream, file_directory_path: Option<String>) {
                     .strip_prefix("/files/")
                     .expect("failed to strip /files/");
 
-                match file_directory_path {
-                    Some(dir_path) => {
+                match (file_directory_path, method) {
+                    (Some(dir_path), "GET") => {
                         let file_path = Path::new(&dir_path).join(file_name);
                         match fs::read(file_path) {
                             Ok(file) => {
@@ -100,7 +97,32 @@ fn handle_client(mut stream: TcpStream, file_directory_path: Option<String>) {
                             }
                         }
                     }
-                    None => {
+                    (Some(dir_path), "POST") => {
+                        while lines.next().is_some_and(|l| !l.is_empty()) {}
+
+                        let mut file: Vec<u8> = Vec::new();
+
+                        for line in lines {
+                            file.extend(line.as_bytes())
+                        }
+
+                        let file_path = Path::new(&dir_path).join(file_name);
+                        match fs::write(file_path, file) {
+                            Ok(_) => {
+                                let response = format!("HTTP/1.1 201 Created\r\n\r\n");
+
+                                let _ = stream
+                                    .write(response.as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+                            }
+                            Err(_) => {
+                                let _ = stream
+                                    .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
+                                    .map_err(|err| eprintln!("failed to write to stream {err}"));
+                            }
+                        }
+                    }
+                    _ => {
                         let _ = stream
                             .write("HTTP/1.1 404 Not Found\r\n\r\n".as_bytes())
                             .map_err(|err| eprintln!("failed to write to stream {err}"));
