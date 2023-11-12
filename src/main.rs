@@ -1,4 +1,5 @@
 // Uncomment this block to pass the first stage
+use std::io::Write;
 use std::net::TcpListener;
 
 fn main() {
@@ -11,8 +12,11 @@ fn main() {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(_stream) => {
+            Ok(mut stream) => {
                 println!("accepted new connection");
+                let _ = stream
+                    .write("HTTP/1.1 200 OK\r\n\r\n".as_bytes())
+                    .map_err(|err| eprintln!("failed to write to stream {err}"));
             }
             Err(e) => {
                 println!("error: {}", e);
